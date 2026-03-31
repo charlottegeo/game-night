@@ -6,20 +6,31 @@ from functools import wraps
 
 _sub_regex = compile('(A|(An)|(The)) ')
 
-try:
-    _database = MongoClient(
-        f'mongodb://{environ["MONGODB_USER"]}:{environ["MONGODB_PASSWORD"]}@{environ.get("MONGODB_HOST", "localhost")}/{environ["MONGODB_DATABASE"]}',
-        ssl = 'MONGODB_SSL' in environ
-    )[environ['MONGODB_DATABASE']]
-except:
-    _database = MongoClient()[environ['MONGODB_DATABASE']]
-_api_keys = _database.api_keys
-_deleted = _database.deleted
-_gamemasters = _database.gamemasters
-_games = _database.games
+_database = None
+_api_keys = None
+_deleted = None
+_gamemasters = None
+_games = None
+
+def connect_db(config):
+    global _database, _api_keys, _deleted, _gamemasters, _games
+    try:
+        client = MongoClient(
+            f'mongodb://{config["MONGODB_USER"]}:{config["MONGODB_PASSWORD"]}@{config.get("MONGODB_HOST")}/{config["MONGODB_DATABASE"]}',
+            ssl = config.get('MONGODB_SSL', False)
+        )
+        _database = client[config['MONGODB_DATABASE']]
+    except Exception:
+        client = MongoClient()
+        _database = client[config['MONGODB_DATABASE']]
+    _api_keys = _database.api_keys
+    _deleted = _database.deleted
+    _gamemasters = _database.gamemasters
+    _games = _database.games
+
 
 def api_key_exists(key):
-    return _api_keys.count({'key': key})
+    return _api_keys.count_documents({'key': key})
 
 def _create_filters(arguments, **kwargs):
     filters = {}
@@ -85,7 +96,7 @@ def delete_game(name, submitter):
     return True
 
 def game_exists(name):
-    return _games.count({'name': compile(f'^{escape(name)}$', I)})
+    return _games.count_documents({'name': compile(f'^{escape(name)}$', I)})
 
 def generate_api_key():
     uuid = str(uuid4())
@@ -96,7 +107,7 @@ def get_api_keys():
     return _api_keys.find()
 
 def get_count(arguments):
-    return _games.count(_create_filters(arguments))
+    return _games.count_documents(_create_filters(arguments))
 
 def get_game(name):
     return _games.find_one({'name': name})
