@@ -111,7 +111,6 @@ def delete(game_name):
     return redirect('/')
 
 def _get_template_variables():
-    print('more hi')
     return {
         'gamemaster': is_gamemaster(session['userinfo']['preferred_username']),
         'image_url': app.config['IMAGE_URL'],
@@ -122,7 +121,6 @@ def _get_template_variables():
 @app.route('/')
 @_auth.oidc_auth('default')
 def index():
-    print('hi')
     return render_template(
         'index.html', games = get_games(request.args),
         **_get_template_variables()
