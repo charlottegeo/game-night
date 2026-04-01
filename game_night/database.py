@@ -14,6 +14,7 @@ _games = None
 
 def connect_db(config):
     global _database, _api_keys, _deleted, _gamemasters, _games
+    print('connecting')
     try:
         client = MongoClient(
             f'mongodb://{config["MONGODB_USER"]}:{config["MONGODB_PASSWORD"]}@{config.get("MONGODB_HOST")}/{config["MONGODB_DATABASE"]}',
@@ -27,6 +28,8 @@ def connect_db(config):
     _deleted = _database.deleted
     _gamemasters = _database.gamemasters
     _games = _database.games
+
+    print('connected to:', client)
 
 
 def api_key_exists(key):
@@ -119,6 +122,7 @@ def get_game_names(expansion = None):
     ).sort([('sort_name', 1)]))
 
 def get_games(arguments):
+    print('hi 2')
     return _games.aggregate([
         {'$match': _create_filters(arguments)},
         {'$sort': _create_sort(arguments, sort_name = 1)},
