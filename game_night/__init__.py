@@ -46,7 +46,7 @@ _config = ProviderConfiguration(
     client_metadata=ClientMetadata(
         client_id=app.config['OIDC_CLIENT_ID'],
         client_secret=app.config['OIDC_CLIENT_SECRET'],
-        post_logout_redirect_uris=[app.config['OIDC_REDIRECT_URI']]
+        post_logout_redirect_uris=[app.config['OIDC_LOGOUT_URI']]
     )
 )
 _auth = OIDCAuthentication({'default': _config}, app)
