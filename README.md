@@ -22,6 +22,7 @@ For OIDC information contact a maintainer of Game-Night
 * `OIDC_CLIENT_ID`
 * `OIDC_CLIENT_SECRET`
 * `OIDC_ISSUER`
+* `OIDC_LOGOUT_URI`
 
 For s3 credentials contact a maintainer of Game-Night
 * `S3_BUCKET`

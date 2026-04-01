@@ -3,17 +3,37 @@ from wtforms.validators import DataRequired, Regexp, ValidationError
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField, FileRequired
 from wtforms import IntegerField, StringField
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
+from wtforms.validators import ValidationError
 
 def _validate_expansion(form, field):
     from game_night.database import game_exists
     if field.data and not game_exists(field.data):
         raise ValidationError(f'"{field.data}" is not an expansion')
 
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
+from wtforms.validators import ValidationError
+
 def _validate_link(form, field):
     try:
-        urlopen(field.data)
-    except:
+        #I had to add a user agent because boardgamegeek was blocking it
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.1;) Gecko/20100101 Firefox/61.2',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+        req = Request(field.data, headers=headers)
+        urlopen(req, timeout=5) 
+    except HTTPError as e:
+        if e.code == 403:
+            pass
+        else:
+            raise ValidationError(f'URL is unreachable (HTTP Error: {e.code})')
+    except URLError as e:
+        raise ValidationError(f'URL is unreachable ({e.reason})')
+    except Exception:
         raise ValidationError('URL is unreachable')
 
 def _validate_name(form, field):
@@ -30,7 +50,7 @@ class Game(FlaskForm):
 
     expansion = StringField('expansion', validators = [_validate_expansion])
     image = FileField('image', validators = [
-        FileRequired(), FileAllowed(['jpg'])
+        FileRequired(), FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Images only!')
     ])
     link = StringField('link', validators = [
         DataRequired(), Regexp('https://boardgamegeek.com/.*'), _validate_link

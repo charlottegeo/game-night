@@ -1,38 +1,64 @@
 from flask import *
-from os import environ
-from flaskext.markdown import Markdown
+import os
+import markdown
+from markupsafe import Markup
 from flask_pyoidc.provider_configuration import *
 from flask_pyoidc.flask_pyoidc import OIDCAuthentication
 from boto3 import client
-from game_night.auth import require_gamemaster, require_read_key
-from game_night.database import *
-from game_night.game import Game
+from botocore.config import Config
 
 app = Flask(__name__)
+
+# Load default configuration and any environment variable overrides
+_root_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+app.config.from_pyfile(os.path.join(_root_dir, 'config.env.py'))
+
+# Load file based configuration overrides if present
+_pyfile_config = os.path.join(_root_dir, 'config.py')
+if os.path.exists(_pyfile_config):
+    app.config.from_pyfile(_pyfile_config)
+
 app.config.update(
-    PREFERRED_URL_SCHEME = environ.get('URL_SCHEME', 'https'),
-    SECRET_KEY = environ['SECRET_KEY'],
-    SERVER_NAME = environ['SERVER_NAME'],
+    PREFERRED_URL_SCHEME = app.config.get('URL_SCHEME', 'https'),
+    SECRET_KEY = app.config['SECRET_KEY'],
+    SERVER_NAME = app.config['SERVER_NAME'],
     WTF_CSRF_ENABLED = False
 )
+
+from game_night.auth import require_gamemaster, require_read_key
+from game_night.database import *
+connect_db(app.config)
+from game_night.game import Game
+
+
 app.jinja_env.lstrip_blocks = True
 app.jinja_env.trim_blocks = True
 app.url_map.strict_slashes = False
 
-Markdown(app)
+@app.template_filter('markdown')
+def _markdown_filter(text):
+    if not text:
+        return ''
+    return Markup(markdown.markdown(text, extensions=['extra', 'sane_lists']))
 
 _config = ProviderConfiguration(
-    environ['OIDC_ISSUER'],
-    client_metadata = ClientMetadata(
-        environ['OIDC_CLIENT_ID'], environ['OIDC_CLIENT_SECRET']
+    app.config['OIDC_ISSUER'],
+    client_metadata=ClientMetadata(
+        client_id=app.config['OIDC_CLIENT_ID'],
+        client_secret=app.config['OIDC_CLIENT_SECRET'],
+        post_logout_redirect_uris=[app.config['OIDC_LOGOUT_URI']]
     )
 )
 _auth = OIDCAuthentication({'default': _config}, app)
 
 _s3 = client(
-    's3', aws_access_key_id = environ['S3_KEY'],
-    aws_secret_access_key = environ['S3_SECRET'],
-    endpoint_url = environ['S3_ENDPOINT']
+    's3', aws_access_key_id = app.config['S3_KEY'],
+    aws_secret_access_key = app.config['S3_SECRET'],
+    endpoint_url = app.config['S3_ENDPOINT'],
+    config = Config(
+        request_checksum_calculation='when_required',
+        response_checksum_validation='when_required'
+    )
 )
 
 @app.route('/api')
@@ -87,7 +113,7 @@ def delete(game_name):
 def _get_template_variables():
     return {
         'gamemaster': is_gamemaster(session['userinfo']['preferred_username']),
-        'image_url': environ['IMAGE_URL'],
+        'image_url': app.config['IMAGE_URL'],
         'owners': get_owners(), 'players': get_players(),
         'submitters': get_submitters()
     }
@@ -148,8 +174,12 @@ def submit():
         )
     game = game.data
     game = {k: v.strip() if type(v) == str else v for k,v in game.items()}
+    filename = game['image'].filename
+    extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'jpg'
+    game['image_extension'] = extension
+
     _s3.upload_fileobj(
-        game['image'], environ['S3_BUCKET'], game['name'] + '.jpg',
+        game['image'], app.config['S3_BUCKET'], f"{game['name']}.{extension}",
         ExtraArgs = {
             'ACL': 'public-read', 'ContentType': game['image'].content_type
         }
